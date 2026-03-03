@@ -1,0 +1,2251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RBT 模型设计器 5.2</title>
+    <style>
+        /* ========== 基础变量 & 全局样式 (5.2 原有 + 5.1 补充) ========== */
+        :root {
+            --r     : 10px;
+            --r-xs  : 6px;
+            --r-pill: 999px;
+            --glass-bar   : rgba(255,255,255,0.72);
+            --glass-side  : rgba(255,255,255,0.65);
+            --glass-card  : rgba(255,255,255,0.58);
+            --glass-float : rgba(255,255,255,0.82);
+            --glass-dark  : rgba(20,20,24,0.78);
+            --glass-modal : rgba(242,242,247,0.78);
+            --border-light: rgba(255,255,255,0.55);
+            --border-dark : rgba(0,0,0,0.07);
+            --sh-sm : 0 2px 8px rgba(0,0,0,0.08);
+            --sh-md : 0 6px 24px rgba(0,0,0,0.12);
+            --sh-lg : 0 16px 48px rgba(0,0,0,0.18);
+            --sh-glow: 0 0 0 1px rgba(255,255,255,0.4) inset;
+            --accent  : #007aff;
+            --accent-h: #0062cc;
+            --danger  : #ff3b30;
+            --t1      : #1c1c1e;
+            --t2      : #6c6c70;
+            --t3      : #aeaeb2;
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: -apple-system, 'Helvetica Neue', sans-serif;
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+            color: var(--t1);
+            -webkit-font-smoothing: antialiased;
+            background:
+                radial-gradient(ellipse 80% 60% at 20% 10%,  rgba(120,180,255,0.35) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 80% at 80% 90%,  rgba(180,120,255,0.25) 0%, transparent 55%),
+                radial-gradient(ellipse 70% 50% at 60% 40%,  rgba(100,220,200,0.18) 0%, transparent 50%),
+                radial-gradient(ellipse 90% 70% at 10% 80%,  rgba(255,180,100,0.15) 0%, transparent 60%),
+                #e8eef8;
+        }
+
+        header {
+            background: var(--glass-bar);
+            backdrop-filter: saturate(180%) blur(24px);
+            -webkit-backdrop-filter: saturate(180%) blur(24px);
+            border-bottom: 1px solid var(--border-dark);
+            box-shadow: var(--sh-sm), var(--sh-glow);
+            padding: 6px 14px;
+            display: flex; 
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 4px;
+            min-height: 52px;
+            z-index: 10;
+        }
+        .brand { font-weight: 700; font-size: 15px; color: var(--t1); display: flex; align-items: center; gap: 6px; margin-right: 8px; letter-spacing: -0.3px; }
+
+        /* 分组容器 */
+        .tool-group {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            border-radius: var(--r);
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(4px);
+            padding: 2px;
+        }
+        .group-toggle {
+            border: 1px solid rgba(255,255,255,0.65);
+            background: var(--glass-card);
+            backdrop-filter: blur(12px);
+            padding: 5px 9px;
+            border-radius: var(--r);
+            font-size: 12px;
+            color: var(--t2);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: 0.15s;
+            min-width: 70px;
+            justify-content: center;
+        }
+        .group-toggle:hover {
+            background: rgba(255,255,255,0.8);
+            border-color: rgba(0,122,255,0.35);
+            color: var(--t1);
+            box-shadow: var(--sh-sm);
+        }
+        .group-toggle .arrow {
+            font-size: 10px;
+            margin-left: 3px;
+            transition: transform 0.2s;
+        }
+        .group-toggle.expanded .arrow {
+            transform: rotate(90deg);
+        }
+        .group-content {
+            display: none;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 4px 2px 4px;
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(4px);
+            border-radius: 0 0 var(--r) var(--r);
+            margin-top: 2px;
+        }
+        .group-content.expanded {
+            display: flex;
+        }
+        /* 嵌套按钮保持原有样式 */
+        .group-content button,
+        .group-content .color-picker-wrapper,
+        .group-content .scale-input,
+        .group-content .angle-input {
+            margin: 0;
+        }
+        .group-content .scale-input,
+        .group-content .angle-input {
+            width: 50px;
+            font-size: 11px;
+            padding: 2px 4px;
+        }
+        .group-content button {
+            padding: 4px 6px;
+            min-width: 32px;
+            font-size: 11px;
+        }
+        .group-content button i { font-size: 13px; }
+
+        /* 基础按钮样式 (5.2 + 5.1 混合) */
+        button {
+            border: 1px solid transparent; background: transparent;
+            padding: 5px 9px; border-radius: var(--r);
+            cursor: pointer; font-size: 12px; color: var(--t2);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+            min-width: 42px; white-space: nowrap;
+            transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+            font-family: inherit;
+        }
+        button:hover {
+            background: rgba(255,255,255,0.60);
+            border-color: rgba(255,255,255,0.70);
+            color: var(--t1);
+            box-shadow: var(--sh-sm), var(--sh-glow);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }
+        button.active {
+            background: rgba(0,122,255,0.12);
+            border-color: rgba(0,122,255,0.28);
+            color: var(--accent);
+            box-shadow: 0 0 0 1px rgba(0,122,255,0.15) inset;
+        }
+        button:disabled { opacity: .28; cursor: default; }
+        button:disabled:hover { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; }
+        button.locked { background: rgba(255,59,48,.10); border-color: rgba(255,59,48,.25); color: var(--danger); }
+        button i { font-style: normal; font-size: 15px; }
+        button.primary {
+            background: var(--accent); color: #fff; border-color: transparent; font-weight: 600;
+            box-shadow: 0 2px 10px rgba(0,122,255,.40), var(--sh-glow);
+        }
+        button.primary:hover { background: var(--accent-h); box-shadow: 0 4px 16px rgba(0,122,255,.50); }
+
+        .color-picker-wrapper {
+            display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer;
+            padding: 4px 8px; border: 1px solid rgba(255,255,255,0.55);
+            border-radius: var(--r);
+            background: rgba(255,255,255,0.55);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            box-shadow: var(--sh-sm);
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .color-picker-wrapper:hover { border-color: rgba(0,122,255,.45); box-shadow: var(--sh-md); }
+        input[type="color"] { border: none; width: 20px; height: 20px; padding: 0; background: none; cursor: pointer; border-radius: var(--r-xs); }
+        #file-input, #project-input { display: none; }
+
+        .main-container { flex: 1; display: flex; overflow: hidden; }
+
+        /* ========== 侧边栏样式 (完整) ========== */
+        aside {
+            width: 280px;
+            background: var(--glass-side);
+            backdrop-filter: saturate(180%) blur(24px);
+            -webkit-backdrop-filter: saturate(180%) blur(24px);
+            border-right: 1px solid rgba(255,255,255,0.45);
+            box-shadow: 2px 0 16px rgba(0,0,0,0.06), var(--sh-glow);
+            display: flex; flex-direction: column; overflow-y: auto;
+        }
+        aside::-webkit-scrollbar { width: 4px; }
+        aside::-webkit-scrollbar-track { background: transparent; }
+        aside::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: var(--r-pill); }
+
+        .sidebar-section { padding: 12px 10px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+        .sidebar-title { font-size: 10.5px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 9px; padding-left: 3px; }
+        .component-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+        .comp-btn {
+            border: 1px solid rgba(255,255,255,0.65);
+            background: var(--glass-card);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            padding: 9px 4px; border-radius: var(--r);
+            height: auto; min-width: 0;
+            box-shadow: var(--sh-sm), var(--sh-glow);
+            transition: all .18s;
+        }
+        .comp-btn:hover {
+            border-color: rgba(0,122,255,0.35);
+            background: rgba(255,255,255,0.80);
+            box-shadow: var(--sh-md), 0 0 0 1px rgba(0,122,255,0.12) inset;
+            transform: translateY(-2px);
+        }
+        .comp-preview { width: 100%; height: 26px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .comp-name { font-size: 11px; color: var(--t2); font-weight: 500; }
+
+        .mech-note { font-size: 9px; color: var(--t3); margin-top: 4px; font-weight: normal; letter-spacing: 0.2px; }
+
+        /* BOM 表格样式 */
+        .bom-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-top: 6px;
+        }
+        .bom-table th {
+            text-align: left;
+            color: var(--t2);
+            font-weight: 600;
+            padding: 4px 2px;
+        }
+        .bom-table td {
+            padding: 4px 2px;
+            border-top: 1px solid rgba(0,0,0,0.05);
+        }
+        .bom-table input.price-input {
+            width: 60px;
+            padding: 2px 4px;
+        }
+        .bom-total {
+            font-size: 12px;
+            font-weight: 600;
+            text-align: right;
+            margin-top: 8px;
+            padding-top: 4px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        /* 评估模态框专用样式 */
+        .assess-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        .assess-item label {
+            width: 120px;
+            color: var(--t1);
+        }
+        .assess-options {
+            display: flex;
+            gap: 20px;
+        }
+        .assess-options input[type="radio"] {
+            margin-right: 4px;
+            accent-color: var(--accent);
+        }
+        .assess-textarea {
+            width: 100%;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.6);
+            backdrop-filter: blur(4px);
+            padding: 8px;
+            color: var(--t1);
+            font-size: 12px;
+            font-family: inherit;
+            margin-top: 4px;
+            resize: vertical;
+        }
+        .status-indicator {
+            font-size: 12px;
+            margin: 8px 0;
+            padding: 6px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.2);
+        }
+        .status-ok { color: #28a745; }
+        .status-warn { color: #dc3545; }
+
+        /* 画布区域 */
+        #canvas-wrapper {
+            flex: 1; position: relative; overflow: hidden; cursor: default;
+            background-image: radial-gradient(circle, rgba(0,0,0,0.07) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        #canvas-wrapper.grabbing { cursor: grabbing; }
+        canvas {
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+            display: block;
+            border-radius: var(--r);
+            box-shadow: var(--sh-md), 0 0 0 1px rgba(255,255,255,0.6) inset;
+            margin: 14px;
+        }
+        .watermark { position: absolute; right: 12px; bottom: 10px; font-size: 10px; color: rgba(0,0,0,.20); pointer-events: none; letter-spacing: .2px; }
+
+        .zoom-controls {
+            position: absolute; bottom: 20px; right: 20px;
+            background: var(--glass-dark);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 5px 7px;
+            border-radius: var(--r-pill);
+            box-shadow: var(--sh-md);
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .zoom-btn {
+            width: 26px; height: 26px; border-radius: var(--r-pill);
+            padding: 0; min-width: 0; border: none; background: transparent;
+            font-size: 16px; color: rgba(255,255,255,0.90);
+            line-height: 1;
+        }
+        .zoom-btn:hover { background: rgba(255,255,255,0.15); box-shadow: none; backdrop-filter: none; }
+        .zoom-percent-input {
+            width: 60px;
+            height: 26px;
+            border: none;
+            background: rgba(0,0,0,0.2);
+            border-radius: var(--r-pill);
+            text-align: center;
+            font-size: 12px;
+            color: white;
+            font-weight: 500;
+            outline: none;
+            padding: 0 4px;
+        }
+        .zoom-percent-input:focus {
+            background: rgba(255,255,255,0.2);
+            box-shadow: 0 0 0 1px var(--accent) inset;
+        }
+
+        .toast {
+            position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+            background: var(--glass-dark);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.95);
+            padding: 9px 20px; border-radius: var(--r-pill);
+            font-size: 13px; opacity: 0; transition: opacity .25s;
+            pointer-events: none; z-index: 100; letter-spacing: .1px;
+            box-shadow: var(--sh-md);
+        }
+        .toast.show { opacity: 1; }
+
+        .ctx-menu {
+            position: absolute; display: none; min-width: 140px;
+            background: var(--glass-float);
+            backdrop-filter: saturate(200%) blur(40px);
+            -webkit-backdrop-filter: saturate(200%) blur(40px);
+            border: 1px solid rgba(255,255,255,0.60);
+            border-radius: var(--r);
+            box-shadow: var(--sh-lg), var(--sh-glow);
+            z-index: 200; overflow: hidden;
+        }
+        .ctx-menu button { width: 100%; justify-content: flex-start; padding: 10px 14px; border-radius: 0; border: none; background: transparent; color: var(--t1); font-size: 13px; backdrop-filter: none; }
+        .ctx-menu button:hover { background: rgba(0,0,0,0.05); box-shadow: none; }
+
+        .modal {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.25);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            display: none; align-items: center; justify-content: center; z-index: 300;
+        }
+        .modal .card {
+            background: var(--glass-modal);
+            backdrop-filter: saturate(200%) blur(40px);
+            -webkit-backdrop-filter: saturate(200%) blur(40px);
+            border: 1px solid rgba(255,255,255,0.65);
+            width: 450px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 22px;
+            border-radius: var(--r);
+            box-shadow: var(--sh-lg), var(--sh-glow);
+        }
+        .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+        /* 价格输入框等 */
+        .scale-input, .angle-input, .price-input {
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.6);
+            backdrop-filter: blur(4px);
+            padding: 3px 5px;
+            color: var(--t1);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand"> 🎨 RBT 5.2 </div>
+
+    <!-- 导出组 -->
+    <div class="tool-group" id="group-export">
+        <button class="group-toggle" data-group="export">📂 导出<span class="arrow">▶</span></button>
+        <div class="group-content" id="group-content-export">
+            <button onclick="saveProject()" style="color:#2e7d32" title="保存进度文件"><i>💾</i> 保存</button>
+            <input type="file" id="project-input" accept=".rbtpmk" onchange="loadProject(event)">
+            <button onclick="document.getElementById('project-input').click()" style="color:#ef6c00" title="打开进度文件"><i>📂</i> 打开</button>
+            <button onclick="exportImage()" title="导出设计图"><i>🖼️</i> 草图</button>
+            <button onclick="exportAssessmentPlusBOMExcel()" title="导出评估+材料清单为Excel"><i>📊</i> Excel</button>
+            <button onclick="exportAssessmentPlusBOMImage()" title="导出评估+材料清单为图片"><i>📄</i> 清单+评估图</button>
+            <button onclick="openAssessmentModal()" title="草图评估"><i>📋</i> 评估</button>
+        </div>
+    </div>
+
+    <!-- 绘图工具组 (已补全id) -->
+    <div class="tool-group" id="group-draw">
+        <button class="group-toggle expanded" data-group="draw">🖊️ 绘图工具<span class="arrow">▶</span></button>
+        <div class="group-content expanded" id="group-content-draw">
+            <button id="tool-select" class="active" onclick="setTool('select')"><i>👆</i> 选择</button>
+            <button id="tool-draw" onclick="setTool('draw')"><i>✏️</i> 画笔</button>
+            <button id="tool-eraser" onclick="setTool('eraser')" title="擦除线条或部件"><i>🧽</i> 橡皮</button>
+            <button id="tool-label" onclick="setTool('label')"><i>🏷️</i> 标注</button>
+        </div>
+    </div>
+
+    <!-- 连接工具组 -->
+    <div class="tool-group" id="group-connect">
+        <button class="group-toggle expanded" data-group="connect">⚡ 连接工具<span class="arrow">▶</span></button>
+        <div class="group-content expanded" id="group-content-connect">
+            <button id="tool-wire-red" onclick="setTool('wire-red')" title="连接红电线"><i style="color:red;">〰️</i> 红线(+)</button>
+            <button id="tool-wire-black" onclick="setTool('wire-black')" title="连接黑电线"><i style="color:black;">〰️</i> 黑线(-)</button>
+            <button id="tool-wire-mech" onclick="setTool('wire-mech')" title="机械传动连接"><i style="color:#d97706;">⚙️</i> 机械线</button>
+        </div>
+    </div>
+
+    <!-- 属性控制组 -->
+    <div class="tool-group" id="group-property">
+        <button class="group-toggle" data-group="property">🎨 属性控制<span class="arrow">▶</span></button>
+        <div class="group-content" id="group-content-property">
+            <button id="btn-lock" onclick="toggleLock()" title="锁定/解锁"><i id="icon-lock">🔓</i> 锁定</button>
+            <button onclick="copySelected()" title="复制 (Ctrl+C)"><i>📋</i> 复制</button>
+            <button onclick="pasteClipboard()" title="粘贴 (Ctrl+V)"><i>📋</i> 粘贴</button>
+            <div class="color-picker-wrapper" title="更改颜色">
+                <i>🎨</i>
+                <input type="color" id="color-picker" oninput="updateColor(this.value)">
+            </div>
+            <div style="display:flex; align-items:center; gap:2px;">
+                <input type="number" id="scale-percent" class="scale-input" value="100" min="1" max="500" step="1" style="width:50px;">
+                <button onclick="applyScaleToSelected()" style="min-width:36px; padding:4px 6px;" title="按百分比缩放">% 缩放</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:2px;">
+                <input type="number" id="angle-input" class="angle-input" value="0" min="0" max="360" step="1" style="width:50px;">
+                <button onclick="applyRotationToSelected()" style="min-width:36px; padding:4px 6px;" title="旋转到指定角度">↻ 旋转</button>
+            </div>
+            <button onclick="moveLayer('up')" title="上移"><i>⬆️</i></button>
+            <button onclick="moveLayer('down')" title="下移"><i>⬇️</i></button>
+            <button id="text-edit-btn" onclick="editText()" style="display:none;"><i>⌨️</i> 编辑</button>
+        </div>
+    </div>
+
+    <!-- 历史操作组 -->
+    <div class="tool-group" id="group-history">
+        <button class="group-toggle" data-group="history">🔄 历史操作<span class="arrow">▶</span></button>
+        <div class="group-content" id="group-content-history">
+            <button id="btn-undo" onclick="undo()" title="撤销 (Ctrl+Z)" disabled><i>↩️</i> 撤销</button>
+            <button id="btn-redo" onclick="redo()" title="重做 (Ctrl+Y)" disabled><i>↪️</i> 重做</button>
+        </div>
+    </div>
+
+    <!-- 清除组 -->
+    <div class="tool-group" id="group-clear">
+        <button class="group-toggle" data-group="clear">🧹 清除<span class="arrow">▶</span></button>
+        <div class="group-content" id="group-content-clear">
+            <button onclick="deleteSelected()" style="color:#d32f2f" title="删除选中"><i>🗑️</i> 删除</button>
+            <button onclick="clearCanvas()" style="color:#666"><i>❌</i> 清空</button>
+        </div>
+    </div>
+
+    <!-- 插入组 -->
+    <div class="tool-group" id="group-insert">
+        <button class="group-toggle" data-group="insert">📎 插入<span class="arrow">▶</span></button>
+        <div class="group-content" id="group-content-insert">
+            <input type="file" id="file-input" accept="image/*" onchange="handleImageUpload(event)">
+            <button onclick="document.getElementById('file-input').click()" style="color:#0066ff"><i>🖼️</i> 图片</button>
+        </div>
+    </div>
+
+    <div style="flex:1"></div>
+    <button onclick="openAboutModal()" title="产品信息" style="min-width:36px;"><i>ℹ️</i> 关于</button>
+</header>
+
+<!-- 隐藏的 props-panel (5.1需要) -->
+<div id="props-panel" style="display:none;"></div>
+
+<div class="main-container">
+    <!-- 侧边栏：5.1完整移植 -->
+    <aside>
+        <!-- 1. 车身组装 -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">🚗 1. 车身组装</div>
+            <div class="component-grid">
+                <button class="comp-btn" onclick="addShape('rect')"><div class="comp-preview"><div style="width:30px; height:20px; background:#ddd; border:1px solid #999;"></div></div><span class="comp-name">方底盘</span></button>
+                <button class="comp-btn" onclick="addShape('round-rect')"><div class="comp-preview"><div style="width:30px; height:20px; background:#ddd; border:1px solid #999; border-radius:6px;"></div></div><span class="comp-name">圆角底盘</span></button>
+                <button class="comp-btn" onclick="addShape('cabin')"><div class="comp-preview"><div style="width:0; height:0; border-bottom:15px solid #aaa; border-left:5px solid transparent; border-right:5px solid transparent; width:20px;"></div></div><span class="comp-name">梯形车顶</span></button>
+                <button class="comp-btn" onclick="addShape('arc')"><div class="comp-preview"><div style="width:30px; height:15px; border-top-left-radius:20px; border-top-right-radius:20px; background:#ddd;"></div></div><span class="comp-name">半圆车身</span></button>
+            </div>
+        </div>
+        <!-- 2. 动力/电子/机械 -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">⚡ 3. 动力/电子/机械</div>
+            <div class="mech-note">●电气端口 | 电机/齿轮/车轴/轮子/轴套：◆机械端口</div>
+            <div class="component-grid">
+                <button class="comp-btn" onclick="addShape('motor')"><div class="comp-preview"><div style="width:20px; height:15px; background:#0066ff; border-radius:2px;"></div></div><span class="comp-name">电机</span></button>
+                <button class="comp-btn" onclick="addShape('battery')"><div class="comp-preview"><div style="width:25px; height:15px; background:#ff4444;"></div></div><span class="comp-name">电池盒</span></button>
+                <button class="comp-btn" onclick="addShape('switch')"><div class="comp-preview"><div style="width:15px; height:15px; background:#22c55e;"></div></div><span class="comp-name">开关</span></button>
+                <button class="comp-btn" onclick="addShape('wheel')"><div class="comp-preview"><div style="width:18px; height:18px; background:#333; border-radius:50%;"></div></div><span class="comp-name">轮子</span></button>
+                <button class="comp-btn" onclick="addShape('gear')"><div class="comp-preview"><div style="width:18px; height:18px; border:2px dashed #f59e0b; border-radius:50%;"></div></div><span class="comp-name">齿轮</span></button>
+                <button class="comp-btn" onclick="addShape('axle')"><div class="comp-preview"><div style="width:30px; height:4px; background:#666;"></div></div><span class="comp-name">车轴</span></button>
+                <button class="comp-btn" onclick="addShape('sleeve')"><div class="comp-preview"><div style="width:20px; height:8px; background:#aaa; border-radius:4px;"></div></div><span class="comp-name">轴套</span></button>
+            </div>
+        </div>
+        <!-- 3. 自由设计 -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">🔷 自由设计</div>
+            <div class="component-grid">
+                <button class="comp-btn" onclick="addShape('circle')"><div class="comp-preview"><div style="width:20px; height:20px; background:#bbb; border-radius:50%;"></div></div><span class="comp-name">圆形</span></button>
+                <button class="comp-btn" onclick="addShape('triangle-iso')"><div class="comp-preview"><div style="width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:20px solid #bbb;"></div></div><span class="comp-name">三角形</span></button>
+                <button class="comp-btn" onclick="addShape('star')"><div class="comp-preview" style="font-size:20px; color:#bbb;">★</div><span class="comp-name">装饰星</span></button>
+            </div>
+        </div>
+        <!-- 材料清单 (BOM) -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">📋 材料清单 (BOM)</div>
+            <div id="bom-container">
+                <table class="bom-table" id="bom-table">
+                    <thead>
+                        <tr><th>组件</th><th>数量</th><th>单价</th><th>总价</th></tr>
+                    </thead>
+                    <tbody id="bom-body"></tbody>
+                </table>
+                <div class="bom-total" id="bom-grand-total">总额: 0.00</div>
+            </div>
+        </div>
+        <!-- 项目信息 -->
+        <div class="sidebar-section" style="background:#f9fafb">
+            <div class="sidebar-title">📄 项目信息</div>
+            <div style="font-size:12px; color:#444; line-height:1.5">
+                <div>RBT模型设计器 5.2</div>
+                <div>作者团队: GEMINI AI、郑家诚、李钻敏老师、深度求索AI</div>
+                <div>--.--版本: 深度求索AI、郑家诚</div>
+
+            </div>
+        </div>
+    </aside>
+
+    <div id="canvas-wrapper">
+        <canvas id="mainCanvas"></canvas>
+        <div class="zoom-controls">
+            <button class="zoom-btn" onclick="changeZoom(-0.1)">-</button>
+            <input type="number" id="zoom-percent" class="zoom-percent-input" value="100" min="50" max="300" step="10" onchange="setZoomFromInput()">
+            <button class="zoom-btn" onclick="changeZoom(0.1)">+</button>
+        </div>
+        <div id="ctx-menu" class="ctx-menu">
+            <button onclick="deleteCtxWire()">🗑️ 删除该连线</button>
+        </div>
+        <div class="watermark">RBT模型设计器 5.2-GEMINI AI、、郑家诚、李钻敏老师、深度求索AI</div>
+
+        <!-- 评估模态框 -->
+        <div id="assessment-modal" class="modal">
+            <div class="card">
+                <div style="font-weight:bold; margin-bottom:15px;">📋 草图评估</div>
+                <!-- 七个是/否条目 -->
+                <div class="assess-item">
+                    <label>稳固性：不稳固</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-stability" value="yes" onchange="updateAssessment('stability', true)"> 是</label>
+                        <label><input type="radio" name="assess-stability" value="no" onchange="updateAssessment('stability', false)"> 不是</label>
+                    </div>
+                </div>
+                <div class="assess-item">
+                    <label>经济性：容易取得材料</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-economy" value="yes" onchange="updateAssessment('economy', true)"> 是</label>
+                        <label><input type="radio" name="assess-economy" value="no" onchange="updateAssessment('economy', false)"> 不是</label>
+                    </div>
+                </div>
+                <div class="assess-item">
+                    <label>美观性：外型可爱</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-aesthetics" value="yes" onchange="updateAssessment('aesthetics', true)"> 是</label>
+                        <label><input type="radio" name="assess-aesthetics" value="no" onchange="updateAssessment('aesthetics', false)"> 不是</label>
+                    </div>
+                </div>
+                <div class="assess-item">
+                    <label>实用性：车身轻</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-practicality" value="yes" onchange="updateAssessment('practicality', true)"> 是</label>
+                        <label><input type="radio" name="assess-practicality" value="no" onchange="updateAssessment('practicality', false)"> 不是</label>
+                    </div>
+                </div>
+                <div class="assess-item">
+                    <label>耐用性：不耐用</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-durability" value="yes" onchange="updateAssessment('durability', true)"> 是</label>
+                        <label><input type="radio" name="assess-durability" value="no" onchange="updateAssessment('durability', false)"> 不是</label>
+                    </div>
+                </div>
+                <div class="assess-item">
+                    <label>方便性：方便携带</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-portability" value="yes" onchange="updateAssessment('portability', true)"> 是</label>
+                        <label><input type="radio" name="assess-portability" value="no" onchange="updateAssessment('portability', false)"> 不是</label>
+                    </div>
+                </div>
+                <div class="assess-item">
+                    <label>制作难度：制作简易</label>
+                    <div class="assess-options">
+                        <label><input type="radio" name="assess-difficulty" value="yes" onchange="updateAssessment('difficulty', true)"> 是</label>
+                        <label><input type="radio" name="assess-difficulty" value="no" onchange="updateAssessment('difficulty', false)"> 不是</label>
+                    </div>
+                </div>
+
+                <div class="status-indicator" id="circuit-status"></div>
+                <div class="status-indicator" id="transmission-status"></div>
+                <div class="status-indicator" id="sleeve-status"></div>
+
+                <div style="margin-top:12px;">
+                    <div style="font-size:12px; color:var(--t2); margin-bottom:2px;">出现问题</div>
+                    <textarea id="assess-issues" class="assess-textarea" rows="2" placeholder="例如：电池盒完全内置导致更换不便" oninput="updateAssessment('issues', this.value)"></textarea>
+                </div>
+                <div style="margin-top:12px;">
+                    <div style="font-size:12px; color:var(--t2); margin-bottom:2px;">解决方案</div>
+                    <textarea id="assess-solution" class="assess-textarea" rows="2" placeholder="例如：重新设计结构，增加易于开合的舱口" oninput="updateAssessment('solution', this.value)"></textarea>
+                </div>
+                <div style="margin-top:12px;">
+                    <div style="font-size:12px; color:var(--t2); margin-bottom:2px;">最终方案</div>
+                    <textarea id="assess-final" class="assess-textarea" rows="2" placeholder="综合考量后确定的最终方案" oninput="updateAssessment('finalPlan', this.value)"></textarea>
+                </div>
+
+                <div class="actions">
+                    <button onclick="closeAssessmentModal()">取消</button>
+                    <button class="primary" onclick="saveAssessmentAndClose()">确认</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关于模态框 -->
+        <div id="about-modal" class="modal">
+            <div class="card">
+                <div style="font-weight:bold; margin-bottom:10px;">关于 RBT 模型设计器 5.2</div>
+                <div style="font-size:13px; line-height:1.6">
+                          <div>RBT模型设计器 5.2</div>
+                          <div>作者团队: GEMINI AI、Tencent EdgeOne、郑家诚、李钻敏老师、深度求索AI</div>
+                          <div>--.--版本: 深度求索AI、郑家诚</div>
+                          <div class="actions">
+                    <button onclick="closeAboutModal()">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast">已复制</div>
+
+<!-- ========== 第一步：5.1完整JavaScript引擎 (画布核心) ========== -->
+<script>
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
+        this.moveTo(x + r, y);
+        this.lineTo(x + w - r, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r);
+        this.lineTo(x + w, y + h - r);
+        this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        this.lineTo(x + r, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r);
+        this.lineTo(x, y + r);
+        this.quadraticCurveTo(x, y, x + r, y);
+        return this;
+    };
+}
+
+// ---------- BOM 定义 ----------
+const bomDefinitions = {
+    'rect': { name: '方底盘', count: 0, unitPrice: 0, total: 0 },
+    'round-rect': { name: '圆角底盘', count: 0, unitPrice: 0, total: 0 },
+    'cabin': { name: '梯形车顶', count: 0, unitPrice: 0, total: 0 },
+    'arc': { name: '半圆车身', count: 0, unitPrice: 0, total: 0 },
+    'motor': { name: '电机', count: 0, unitPrice: 0, total: 0 },
+    'battery': { name: '电池盒', count: 0, unitPrice: 0, total: 0 },
+    'switch': { name: '开关', count: 0, unitPrice: 0, total: 0 },
+    'wheel': { name: '轮子', count: 0, unitPrice: 0, total: 0 },
+    'gear': { name: '齿轮', count: 0, unitPrice: 0, total: 0 },
+    'axle': { name: '车轴', count: 0, unitPrice: 0, total: 0 },
+    'sleeve': { name: '轴套', count: 0, unitPrice: 0, total: 0 },
+    'wire-red': { name: '红线(+)', count: 0, unitPrice: 0, total: 0 },
+    'wire-black': { name: '黑线(-)', count: 0, unitPrice: 0, total: 0 },
+    'circle': { name: '圆形', count: 0, unitPrice: 0, total: 0 },
+    'triangle-iso': { name: '三角形', count: 0, unitPrice: 0, total: 0 },
+    'star': { name: '装饰星', count: 0, unitPrice: 0, total: 0 }
+};
+
+const state = {
+    tool: 'select', 
+    shapes: [],
+    selectedId: null,
+    zoom: 1, panX: 0, panY: 0,
+    isDragging: false, isRotating: false, isResizing: false, isDrawing: false, isErasing: false,
+    dragTargetId: null,
+    dragGroup: null,
+    startX: 0, startY: 0, lastX: 0, lastY: 0,
+    rotationStartAngle: 0, initialRotation: 0,
+    resizeStartDist: 0, initialW: 0, initialH: 0,
+    currentPath: [], 
+    width: 800, height: 600,
+    hoverHandle: null,
+    clipboard: null,
+    wireStart: null,
+    hoverPort: null,
+    mouseWx: 0,
+    mouseWy: 0,
+    shortActive: false,
+    ctxMenuWireId: null,
+    bom: JSON.parse(JSON.stringify(bomDefinitions)),
+    bomGrandTotal: 0,
+    assessment: {
+        stability: true,
+        economy: true,
+        aesthetics: true,
+        practicality: true,
+        durability: true,
+        portability: true,
+        difficulty: true,
+        issues: '',
+        solution: '',
+        finalPlan: ''
+    }
+};
+
+const historyState = {
+    stack: [],
+    current: -1,
+    limit: 30
+};
+
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const wrapper = document.getElementById('canvas-wrapper');
+const colorPicker = document.getElementById('color-picker');
+const propsPanel = document.getElementById('props-panel');
+const textEditBtn = document.getElementById('text-edit-btn');
+const btnLock = document.getElementById('btn-lock');
+const iconLock = document.getElementById('icon-lock');
+const toast = document.getElementById('toast');
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+const scaleInput = document.getElementById('scale-percent');
+const angleInput = document.getElementById('angle-input');
+const zoomPercentInput = document.getElementById('zoom-percent');
+
+// 评估模态框元素
+const assessModal = document.getElementById('assessment-modal');
+const stabilityRadios = document.getElementsByName('assess-stability');
+const economyRadios = document.getElementsByName('assess-economy');
+const aestheticsRadios = document.getElementsByName('assess-aesthetics');
+const practicalityRadios = document.getElementsByName('assess-practicality');
+const durabilityRadios = document.getElementsByName('assess-durability');
+const portabilityRadios = document.getElementsByName('assess-portability');
+const difficultyRadios = document.getElementsByName('assess-difficulty');
+const issuesText = document.getElementById('assess-issues');
+const solutionText = document.getElementById('assess-solution');
+const finalText = document.getElementById('assess-final');
+const circuitStatus = document.getElementById('circuit-status');
+const transStatus = document.getElementById('transmission-status');
+const sleeveStatus = document.getElementById('sleeve-status');
+
+let pendingAction = null;
+
+// ---------- BOM 函数 ----------
+function updateBOM() {
+    for (let key in state.bom) {
+        state.bom[key].count = 0;
+    }
+    state.shapes.forEach(s => {
+        if (s.type === 'part' && state.bom.hasOwnProperty(s.subtype)) {
+            state.bom[s.subtype].count++;
+        }
+        if (s.type === 'wire') {
+            if (s.color === '#d32f2f') {
+                state.bom['wire-red'].count++;
+            } else if (s.color === '#212121') {
+                state.bom['wire-black'].count++;
+            }
+        }
+    });
+    recalcBOMTotals();
+    renderBOM();
+}
+
+function recalcBOMTotals() {
+    let grandTotal = 0;
+    for (let key in state.bom) {
+        const item = state.bom[key];
+        item.total = item.count * item.unitPrice;
+        grandTotal += item.total;
+    }
+    state.bomGrandTotal = grandTotal;
+}
+
+function renderBOM() {
+    const tbody = document.getElementById('bom-body');
+    if (!tbody) return;
+    let html = '';
+    for (let key in state.bom) {
+        const item = state.bom[key];
+        if (item.count === 0) continue;
+        html += `<tr>
+            <td>${item.name}</td>
+            <td>${item.count}</td>
+            <td><input type="number" class="price-input" data-key="${key}" value="${item.unitPrice}" min="0" step="0.01" oninput="updateBOMPrice('${key}', this.value)"></td>
+            <td>${item.total.toFixed(2)}</td>
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+    document.getElementById('bom-grand-total').innerText = `总额: ${state.bomGrandTotal.toFixed(2)}`;
+}
+
+window.updateBOMPrice = function(key, value) {
+    const price = parseFloat(value) || 0;
+    if (state.bom[key]) {
+        state.bom[key].unitPrice = price;
+        recalcBOMTotals();
+        renderBOM();
+    }
+};
+
+function afterShapeChange() {
+    updateBOM();
+}
+
+// ---------- 评估函数 ----------
+function initAssessmentUI() {
+    const a = state.assessment;
+    function setRadio(radios, value) {
+        for (let r of radios) {
+            if ((value && r.value === 'yes') || (!value && r.value === 'no')) {
+                r.checked = true;
+                break;
+            }
+        }
+    }
+    setRadio(stabilityRadios, a.stability);
+    setRadio(economyRadios, a.economy);
+    setRadio(aestheticsRadios, a.aesthetics);
+    setRadio(practicalityRadios, a.practicality);
+    setRadio(durabilityRadios, a.durability);
+    setRadio(portabilityRadios, a.portability);
+    setRadio(difficultyRadios, a.difficulty);
+    issuesText.value = a.issues || '';
+    solutionText.value = a.solution || '';
+    finalText.value = a.finalPlan || '';
+
+    const motors = state.shapes.filter(s => s.type==='part' && s.subtype==='motor');
+    const anyPowered = motors.some(m => m.powered);
+    const short = state.shortActive;
+    if (short) circuitStatus.innerHTML = '<span class="status-warn">⚠️ 电路短路！电池已保护</span>';
+    else if (anyPowered) circuitStatus.innerHTML = '<span class="status-ok">✅ 电路正常，电机通电</span>';
+    else circuitStatus.innerHTML = '<span class="status-warn">⚠️ 电路未通电或断路</span>';
+
+    const wheels = state.shapes.filter(s => s.type==='part' && s.subtype==='wheel');
+    const anySpinning = wheels.some(w => w.mechSpinning);
+    if (anySpinning) transStatus.innerHTML = '<span class="status-ok">✅ 传动链完整，轮子运转</span>';
+    else transStatus.innerHTML = '<span class="status-warn">⚠️ 传动链断开或无动力</span>';
+
+    const axles = state.shapes.filter(s => s.type==='part' && s.subtype==='axle');
+    const sleeves = state.shapes.filter(s => s.type==='part' && s.subtype==='sleeve');
+    if (axles.length > 0 && sleeves.length === 0) {
+        sleeveStatus.innerHTML = '<span class="status-warn">⚠️ 车轴未使用轴套固定，可能影响稳定性</span>';
+    } else if (axles.length === 0 && sleeves.length > 0) {
+        sleeveStatus.innerHTML = '<span class="status-warn">⚠️ 轴套未与车轴配合</span>';
+    } else if (axles.length > 0 && sleeves.length > 0) {
+        sleeveStatus.innerHTML = '<span class="status-ok">✅ 轴套安装正常</span>';
+    } else {
+        sleeveStatus.innerHTML = '';
+    }
+}
+
+function updateAssessment(key, value) {
+    if (key === 'issues' || key === 'solution' || key === 'finalPlan') {
+        state.assessment[key] = value;
+    } else {
+        state.assessment[key] = value;
+    }
+}
+
+function openAssessmentModal(callback) {
+    pendingAction = callback;
+    initAssessmentUI();
+    assessModal.style.display = 'flex';
+}
+
+function closeAssessmentModal() {
+    assessModal.style.display = 'none';
+    pendingAction = null;
+}
+
+function saveAssessmentAndClose() {
+    const action = pendingAction;
+    closeAssessmentModal();
+    if (action) {
+        action();
+    }
+}
+
+// ---------- 通用工具函数 ----------
+function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+function resizeCanvas() {
+    canvas.width = wrapper.clientWidth;
+    canvas.height = wrapper.clientHeight;
+    state.width = canvas.width;
+    state.height = canvas.height;
+    draw();
+}
+window.addEventListener('resize', resizeCanvas);
+setTimeout(resizeCanvas, 100);
+
+function saveState() {
+    if (historyState.current < historyState.stack.length - 1) {
+        historyState.stack = historyState.stack.slice(0, historyState.current + 1);
+    }
+    const fullState = {
+        shapes: state.shapes,
+        assessment: state.assessment,
+        bom: state.bom
+    };
+    historyState.stack.push(JSON.stringify(fullState));
+    if (historyState.stack.length > historyState.limit) {
+        historyState.stack.shift();
+    } else {
+        historyState.current++;
+    }
+    updateUndoRedoUI();
+}
+
+function updateUndoRedoUI() {
+    btnUndo.disabled = historyState.current <= 0;
+    btnRedo.disabled = historyState.current >= historyState.stack.length - 1;
+}
+
+function undo() {
+    if (historyState.current > 0) {
+        historyState.current--;
+        restoreState(historyState.stack[historyState.current]);
+    }
+}
+
+function redo() {
+    if (historyState.current < historyState.stack.length - 1) {
+        historyState.current++;
+        restoreState(historyState.stack[historyState.current]);
+    }
+}
+
+function restoreState(jsonString) {
+    const full = JSON.parse(jsonString);
+    state.shapes = full.shapes || [];
+    state.assessment = full.assessment || { ...state.assessment };
+    state.bom = full.bom || JSON.parse(JSON.stringify(bomDefinitions));
+    state.shapes.forEach(s => {
+        if (s.type === 'image' && s.imgSrc && !s.img) {
+            const img = new Image();
+            img.src = s.imgSrc;
+            s.img = img;
+            img.onload = () => draw();
+        }
+    });
+    selectShape(null);
+    afterShapeChange();
+    draw();
+    if (typeof updateCircuit === 'function') updateCircuit();
+    updateUndoRedoUI();
+}
+
+setTimeout(() => saveState(), 200);
+
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
+function toWorld(sx, sy) { return { x: (sx - state.panX) / state.zoom, y: (sy - state.panY) / state.zoom }; }
+function rotatePoint(x, y, cx, cy, angleDeg) {
+    const rad = angleDeg * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const dx = x - cx, dy = y - cy;
+    return { x: cx + dx*cos - dy*sin, y: cy + dx*sin + dy*cos };
+}
+
+function distToSegment(p, v, w) {
+    const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
+    if (l2 == 0) return Math.hypot(p.x - v.x, p.y - v.y);
+    let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+}
+
+function isPointInShape(wx, wy, s) {
+    if (s.type === 'drawing') return false;
+    if (s.type === 'line') return false;
+    const p = rotatePoint(wx, wy, s.x, s.y, -s.rotation);
+    return p.x >= s.x - s.w/2 && p.x <= s.x + s.w/2 &&
+           p.y >= s.y - s.h/2 && p.y <= s.y + s.h/2;
+}
+
+function addShape(type) {
+    const cx = (state.width/2 - state.panX)/state.zoom;
+    const cy = (state.height/2 - state.panY)/state.zoom;
+    const s = { 
+        id: generateId(), x: cx+(Math.random()-0.5)*40, y: cy+(Math.random()-0.5)*40, 
+        rotation: 0, type: 'part', subtype: type, w: 100, h: 100, color: '#dddddd', locked: false
+    };
+
+    switch(type) {
+        case 'rect': s.w=200; s.h=100; s.color='#e0e0e0'; break;
+        case 'round-rect': s.w=200; s.h=100; s.color='#e0e0e0'; break;
+        case 'cabin': s.w=120; s.h=80; s.color='#aaddff'; s.subtype='trapezoid'; break;
+        case 'arc': s.w=150; s.h=75; s.color='#e0e0e0'; break;
+        case 'circle': s.w=80; s.h=80; s.color='#cbd5e1'; break;
+        case 'triangle-iso': s.w=80; s.h=80; s.color='#cbd5e1'; break;
+        case 'star': s.w=80; s.h=80; s.color='#fcd34d'; break;
+        case 'motor': s.w=60; s.h=40; s.color='#3b82f6'; s.powered=false; s.powerT=0; break;
+        case 'battery': s.w=80; s.h=50; s.color='#ef4444'; s.level=1; s.voltage=1.5; s.tripped=false; break;
+        case 'switch': s.w=40; s.h=40; s.color='#10b981'; s.closed=true; break;
+        case 'wheel': s.w=60; s.h=60; s.color='#1f2937'; break;
+        case 'gear': s.w=50; s.h=50; s.color='#fbbf24'; break;
+        case 'axle': s.w=160; s.h=8; s.color='#6b7280'; break;
+        case 'sleeve': s.w=30; s.h=10; s.color='#aaaaaa'; break;
+    }
+    state.shapes.push(s);
+    afterShapeChange();
+    saveState();
+    selectShape(s.id);
+    setTool('select');
+    draw();
+}
+
+function addLabelOrDim(type) { 
+    const cx = (state.width/2 - state.panX)/state.zoom; const cy = (state.height/2 - state.panY)/state.zoom; 
+    if (type === 'label') { state.shapes.push({ id: generateId(), type: 'label', x: cx, y: cy, ex: cx+50, ey: cy-50, text: '名称 - 系统', locked: false }); } 
+    else if (type === 'dimension') { state.shapes.push({ id: generateId(), type: 'dimension', x: cx, y: cy, w: 100, text: '20 cm', locked: false }); } 
+    saveState();
+    setTool('select'); draw(); 
+}
+
+function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+            const cx = (state.width/2 - state.panX)/state.zoom;
+            const cy = (state.height/2 - state.panY)/state.zoom;
+            let w = img.width, h = img.height;
+            if (w > 300) { h = h * (300/w); w = 300; }
+            state.shapes.push({
+                id: generateId(), type: 'image', x: cx, y: cy, rotation: 0,
+                w: w, h: h, img: img, imgSrc: event.target.result, locked: false
+            });
+            afterShapeChange();
+            saveState();
+            draw();
+        }
+        img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; 
+}
+
+function saveProject() {
+    openAssessmentModal(() => {
+        const fullState = {
+            shapes: state.shapes,
+            assessment: state.assessment,
+            bom: state.bom
+        };
+        const data = JSON.stringify(fullState);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '我的模型设计.rbtpmk';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast("进度已保存");
+    });
+}
+
+function exportImage() {
+    openAssessmentModal(() => {
+        selectShape(null);
+        draw();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.font = '12px Arial';
+        ctx.fillStyle = 'rgba(100,100,100,0.5)';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        const lines = [
+            'RBT模型设计器 5.2',
+            '作者团队:GEMINI AI、Tencent EdgeOne、郑家诚、李钻敏老师、深度求索AI',
+            '部署成网站:Tencent EdgeOne、郑家诚',
+            '--.--版本:深度求索AI、郑家诚',
+            'V--版本:GEMINIAI、李钻敏老师'
+        ];
+        const margin = 10;
+        const lineHeight = 16;
+        let y = canvas.height - margin;
+        for (let i = lines.length - 1; i >= 0; i--) {
+            ctx.fillText(lines[i], canvas.width - margin, y);
+            y -= lineHeight;
+        }
+        ctx.restore();
+
+        setTimeout(() => {
+            const link = document.createElement('a');
+            link.download = '设计草图.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }, 50);
+    });
+}
+
+function exportAssessmentPlusBOMImage() {
+    const a = state.assessment;
+    const lines = [
+        'RBT模型设计器 5.2 - 草图评估 + 材料清单',
+        '================================',
+        '【评估结果】',
+        `稳固性(不稳固): ${a.stability ? '是' : '不是'}`,
+        `经济性(容易取得材料): ${a.economy ? '是' : '不是'}`,
+        `美观性(外型可爱): ${a.aesthetics ? '是' : '不是'}`,
+        `实用性(车身轻): ${a.practicality ? '是' : '不是'}`,
+        `耐用性(不耐用): ${a.durability ? '是' : '不是'}`,
+        `方便性(方便携带): ${a.portability ? '是' : '不是'}`,
+        `制作难度(制作简易): ${a.difficulty ? '是' : '不是'}`,
+        `出现问题: ${a.issues || '无'}`,
+        `解决方案: ${a.solution || '无'}`,
+        `最终方案: ${a.finalPlan || '无'}`,
+        '================================',
+        '【材料清单】'
+    ];
+    for (let key in state.bom) {
+        const item = state.bom[key];
+        if (item.count > 0) {
+            lines.push(`${item.name} x${item.count}  单价:${item.unitPrice.toFixed(2)}  总价:${item.total.toFixed(2)}`);
+        }
+    }
+    lines.push(`总额: ${state.bomGrandTotal.toFixed(2)}`);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 40 + lines.length * 24;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#333333';
+    ctx.font = '16px Arial';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    lines.forEach((line, i) => {
+        ctx.fillText(line, 20, 20 + i * 24);
+    });
+    const link = document.createElement('a');
+    link.download = '评估+材料清单.png';
+    link.href = canvas.toDataURL();
+    link.click();
+}
+
+function exportAssessmentPlusBOMExcel() {
+    const a = state.assessment;
+    let csv = "RBT模型设计器 5.2 - 草图评估 + 材料清单\n";
+    csv += "================================\n";
+    csv += "【评估结果】\n";
+    csv += `稳固性(不稳固),${a.stability ? '是' : '不是'}\n`;
+    csv += `经济性(容易取得材料),${a.economy ? '是' : '不是'}\n`;
+    csv += `美观性(外型可爱),${a.aesthetics ? '是' : '不是'}\n`;
+    csv += `实用性(车身轻),${a.practicality ? '是' : '不是'}\n`;
+    csv += `耐用性(不耐用),${a.durability ? '是' : '不是'}\n`;
+    csv += `方便性(方便携带),${a.portability ? '是' : '不是'}\n`;
+    csv += `制作难度(制作简易),${a.difficulty ? '是' : '不是'}\n`;
+    csv += `出现问题,${a.issues || '无'}\n`;
+    csv += `解决方案,${a.solution || '无'}\n`;
+    csv += `最终方案,${a.finalPlan || '无'}\n`;
+    csv += "================================\n";
+    csv += "【材料清单】\n";
+    csv += "组件,数量,单价,总价\n";
+    for (let key in state.bom) {
+        const item = state.bom[key];
+        if (item.count > 0) {
+            csv += `${item.name},${item.count},${item.unitPrice.toFixed(2)},${item.total.toFixed(2)}\n`;
+        }
+    }
+    csv += `总额,,,${state.bomGrandTotal.toFixed(2)}`;
+
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = '评估+材料清单.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
+
+function loadProject(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        try {
+            const data = JSON.parse(event.target.result);
+            if (data.shapes && Array.isArray(data.shapes)) {
+                state.shapes = data.shapes;
+                state.assessment = data.assessment || { ...state.assessment };
+                state.bom = data.bom || JSON.parse(JSON.stringify(bomDefinitions));
+                state.shapes.forEach(s => {
+                    if (s.type === 'image' && s.imgSrc) {
+                        const img = new Image();
+                        img.onload = () => draw();
+                        img.src = s.imgSrc;
+                        s.img = img;
+                    }
+                });
+                historyState.stack = [JSON.stringify({ shapes: state.shapes, assessment: state.assessment, bom: state.bom })];
+                historyState.current = 0;
+                updateUndoRedoUI();
+                selectShape(null);
+                afterShapeChange();
+                draw();
+                showToast("进度已读取");
+            } else {
+                alert("文件格式错误");
+            }
+        } catch (err) {
+            alert("无法读取文件: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+}
+
+function setTool(t) {
+    state.tool = t;
+    document.querySelectorAll('[id^="tool-"]').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tool-' + t);
+    if(btn) btn.classList.add('active');
+    wrapper.style.cursor = (t === 'draw' || t.startsWith('wire') || t === 'eraser') ? 'crosshair' : 'default';
+}
+
+function selectShape(id) {
+    state.selectedId = id;
+    if (id) {
+        propsPanel.classList.add('active');
+        const s = state.shapes.find(x => x.id === id);
+        if (s && s.locked) { btnLock.classList.add('locked'); iconLock.innerText = '🔒'; btnLock.innerHTML = '<i id="icon-lock">🔒</i> 已锁定'; } 
+        else { btnLock.classList.remove('locked'); iconLock.innerText = '🔓'; btnLock.innerHTML = '<i id="icon-lock">🔓</i> 锁定'; }
+        textEditBtn.style.display = (s && (s.type === 'label' || s.type === 'dimension')) ? 'flex' : 'none';
+        if(s && s.color) colorPicker.value = s.color;
+        if (scaleInput) scaleInput.value = 100;
+        if (angleInput && s && (s.type === 'part' || s.type === 'image')) {
+            angleInput.value = Math.round(s.rotation % 360);
+        }
+    } else {
+        propsPanel.classList.remove('active'); textEditBtn.style.display = 'none';
+        btnLock.classList.remove('locked'); btnLock.innerHTML = '<i id="icon-lock">🔓</i> 锁定';
+        if (angleInput) angleInput.value = 0;
+    }
+    draw();
+}
+
+function toggleLock() { if (state.selectedId) { const s = state.shapes.find(x => x.id === state.selectedId); if (s) { s.locked = !s.locked; selectShape(state.selectedId); saveState(); } } }
+function editText() { if (!state.selectedId) return; const s = state.shapes.find(x => x.id === state.selectedId); if (s && (s.type === 'label' || s.type === 'dimension')) { const txt = prompt("修改文字:", s.text); if (txt !== null) { s.text = txt; draw(); saveState(); } } }
+function updateColor(hex) { if (state.selectedId) { const s = state.shapes.find(x => x.id === state.selectedId); if (s && !s.locked) { s.color = hex; draw(); saveState(); } } }
+function moveLayer(dir) { if (!state.selectedId) return; const idx = state.shapes.findIndex(s => s.id === state.selectedId); if (idx === -1) return; const item = state.shapes.splice(idx, 1)[0]; if (dir === 'up') state.shapes.push(item); else state.shapes.unshift(item); draw(); saveState(); }
+function deleteSelected() { if (state.selectedId) { const s = state.shapes.find(x => x.id === state.selectedId); if (s && s.locked) { showToast("已锁定，无法删除"); return; } state.shapes = state.shapes.filter(sh => sh.id !== state.selectedId); selectShape(null); afterShapeChange(); saveState(); draw(); } }
+function clearCanvas() { if(confirm("确定清空画布？")) { state.shapes=[]; selectShape(null); afterShapeChange(); saveState(); draw(); } }
+
+function changeZoom(d) {
+    state.zoom = Math.min(Math.max(0.5, state.zoom + d), 3);
+    if (zoomPercentInput) zoomPercentInput.value = Math.round(state.zoom * 100);
+    draw();
+}
+function resetZoom() { 
+    state.zoom = 1; state.panX = 0; state.panY = 0;
+    if (zoomPercentInput) zoomPercentInput.value = 100;
+    draw(); 
+}
+function setZoomFromInput() {
+    if (!zoomPercentInput) return;
+    let percent = parseFloat(zoomPercentInput.value);
+    if (isNaN(percent) || percent < 50) percent = 50;
+    if (percent > 300) percent = 300;
+    state.zoom = percent / 100;
+    zoomPercentInput.value = percent;
+    draw();
+}
+
+function copySelected() { if (!state.selectedId) return; const s = state.shapes.find(x => x.id === state.selectedId); if (s) { const clone = { ...s }; if (s.points) clone.points = s.points.map(p => ({...p})); state.clipboard = clone; showToast("已复制"); } }
+function pasteClipboard() { if (!state.clipboard) { showToast("剪贴板为空"); return; } const s = state.clipboard; const newShape = { ...s }; newShape.id = generateId(); const offset = 20 / state.zoom; newShape.x += offset; newShape.y += offset; newShape.locked = false; if (newShape.type === 'label') { newShape.ex += offset; newShape.ey += offset; } if (newShape.points) { newShape.points = s.points.map(p => ({ x: p.x + offset, y: p.y + offset })); } state.shapes.push(newShape); afterShapeChange(); selectShape(newShape.id); draw(); showToast("已粘贴"); saveState(); }
+
+function openAboutModal(){ document.getElementById('about-modal').style.display='flex'; }
+function closeAboutModal(){ document.getElementById('about-modal').style.display='none'; }
+
+function applyScaleToSelected() {
+    if (!state.selectedId) { showToast("请先选择一个部件"); return; }
+    const s = state.shapes.find(x => x.id === state.selectedId);
+    if (!s || (s.type !== 'part' && s.type !== 'image') || s.locked) { showToast("只能缩放未锁定的零件或图片"); return; }
+    const percent = parseFloat(scaleInput.value);
+    if (isNaN(percent) || percent <= 0) { showToast("请输入有效的百分比 (大于0)"); return; }
+    const scale = percent / 100;
+    const newW = Math.max(10, s.w * scale);
+    const newH = Math.max(10, s.h * scale);
+    if (newW !== s.w || newH !== s.h) {
+        s.w = newW; s.h = newH; draw(); saveState(); showToast(`已缩放至 ${percent}%`);
+    } else { showToast("尺寸未变化"); }
+}
+
+function applyRotationToSelected() {
+    if (!state.selectedId) { showToast("请先选择一个部件"); return; }
+    const s = state.shapes.find(x => x.id === state.selectedId);
+    if (!s || (s.type !== 'part' && s.type !== 'image') || s.locked) { showToast("只能旋转未锁定的零件或图片"); return; }
+    let angle = parseFloat(angleInput.value);
+    if (isNaN(angle)) angle = 0;
+    angle = angle % 360;
+    if (angle < 0) angle += 360;
+    s.rotation = angle;
+    angleInput.value = angle;
+    draw(); saveState(); showToast(`已旋转至 ${angle}°`);
+}
+
+// ========== 端口系统 ==========
+function listPorts(s) {
+    if (s.type !== 'part') return [];
+    if (s.subtype === 'battery') return ['+', '-'];
+    if (s.subtype === 'motor') return ['A', 'B'];
+    if (s.subtype === 'switch') return ['IN', 'OUT'];
+    return [];
+}
+function portLocalPos(s, k) {
+    const hw = s.w / 2;
+    if (s.subtype === 'battery') {
+        if (k === '+') return { x: hw, y: 0 };
+        if (k === '-') return { x: -hw, y: 0 };
+    }
+    if (s.subtype === 'motor') {
+        if (k === 'A') return { x: -hw, y: 0 };
+        if (k === 'B') return { x: hw, y: 0 };
+    }
+    if (s.subtype === 'switch') {
+        if (k === 'IN') return { x: -hw, y: 0 };
+        if (k === 'OUT') return { x: hw, y: 0 };
+    }
+    return null;
+}
+function portWorldPos(s, k) {
+    const p = portLocalPos(s, k);
+    if (!p) return null;
+    const rp = rotatePoint(p.x, p.y, 0, 0, s.rotation);
+    return { x: s.x + rp.x, y: s.y + rp.y };
+}
+
+function listMechPorts(s) {
+    if (s.type !== 'part') return [];
+    if (s.subtype === 'motor') return ['shaft'];
+    if (s.subtype === 'gear') return ['c'];
+    if (s.subtype === 'axle') return ['L', 'R', 'C'];
+    if (s.subtype === 'wheel') return ['hub'];
+    if (s.subtype === 'sleeve') return ['c'];
+    return [];
+}
+function mechPortLocalPos(s, k) {
+    const hw = s.w / 2, hh = s.h / 2;
+    if (s.subtype === 'motor') {
+        if (k === 'shaft') return { x: 0, y: -hh - 4 };
+    }
+    if (s.subtype === 'gear') {
+        if (k === 'c') return { x: 0, y: 0 };
+    }
+    if (s.subtype === 'axle') {
+        if (k === 'L') return { x: -hw, y: 0 };
+        if (k === 'R') return { x: hw, y: 0 };
+        if (k === 'C') return { x: 0, y: 0 };
+    }
+    if (s.subtype === 'wheel') {
+        if (k === 'hub') return { x: 0, y: 0 };
+    }
+    if (s.subtype === 'sleeve') {
+        if (k === 'c') return { x: 0, y: 0 };
+    }
+    return null;
+}
+function mechPortWorldPos(s, k) {
+    const p = mechPortLocalPos(s, k);
+    if (!p) return null;
+    const rp = rotatePoint(p.x, p.y, 0, 0, s.rotation);
+    return { x: s.x + rp.x, y: s.y + rp.y };
+}
+
+function getPortAt(wx, wy, preferType) {
+    const r2 = 100 / (state.zoom ** 2);
+    for (let i = state.shapes.length - 1; i >= 0; i--) {
+        const s = state.shapes[i];
+        if (s.type !== 'part') continue;
+        if (!preferType || preferType === 'elec') {
+            const ks = listPorts(s);
+            for (const k of ks) {
+                const p = portWorldPos(s, k);
+                if (!p) continue;
+                if ((wx - p.x) ** 2 + (wy - p.y) ** 2 < r2) return { shapeId: s.id, port: k, portType: 'elec' };
+            }
+        }
+        if (!preferType || preferType === 'mech') {
+            const ms = listMechPorts(s);
+            for (const k of ms) {
+                const p = mechPortWorldPos(s, k);
+                if (!p) continue;
+                if ((wx - p.x) ** 2 + (wy - p.y) ** 2 < r2) return { shapeId: s.id, port: k, portType: 'mech' };
+            }
+        }
+    }
+    return null;
+}
+
+function wireEndpoints(w) {
+    const sa = state.shapes.find(s => s.id === w.a.shapeId);
+    const sb = state.shapes.find(s => s.id === w.b.shapeId);
+    if (!sa || !sb) return null;
+    let pa, pb;
+    if (w.wireType === 'mech') {
+        pa = mechPortWorldPos(sa, w.a.port);
+        pb = mechPortWorldPos(sb, w.b.port);
+    } else {
+        pa = portWorldPos(sa, w.a.port);
+        pb = portWorldPos(sb, w.b.port);
+    }
+    if (!pa || !pb) return null;
+    return { a: pa, b: pb };
+}
+
+function drawWire(c, w) {
+    const ep = wireEndpoints(w);
+    if (!ep) return;
+    if (w.wireType === 'mech') {
+        const mechColor = w.mechSpinning ? '#ff6600' : '#999999';
+        c.beginPath(); c.strokeStyle = mechColor; c.lineWidth = 6; c.lineCap = 'round';
+        c.moveTo(ep.a.x, ep.a.y); c.lineTo(ep.b.x, ep.b.y); c.stroke();
+        c.fillStyle = mechColor;
+        c.fillRect(ep.a.x - 4, ep.a.y - 4, 8, 8);
+        c.fillRect(ep.b.x - 4, ep.b.y - 4, 8, 8);
+    } else {
+        const dy = Math.abs(ep.b.y - ep.a.y) * 0.4 + 40;
+        const cx1 = ep.a.x, cy1 = ep.a.y + dy, cx2 = ep.b.x, cy2 = ep.b.y + dy;
+        if (w.wirePowered) {
+            c.beginPath(); c.moveTo(ep.a.x, ep.a.y); c.bezierCurveTo(cx1, cy1, cx2, cy2, ep.b.x, ep.b.y);
+            c.strokeStyle = 'rgba(255,220,0,0.5)'; c.lineWidth = 8; c.lineCap = 'round'; c.stroke();
+        }
+        c.beginPath(); c.moveTo(ep.a.x, ep.a.y); c.bezierCurveTo(cx1, cy1, cx2, cy2, ep.b.x, ep.b.y);
+        c.strokeStyle = w.color || '#444'; c.lineWidth = 3; c.lineCap = 'round'; c.stroke();
+        c.fillStyle = w.color || '#444';
+        c.beginPath(); c.arc(ep.a.x, ep.a.y, 3, 0, Math.PI * 2); c.fill();
+        c.beginPath(); c.arc(ep.b.x, ep.b.y, 3, 0, Math.PI * 2); c.fill();
+    }
+}
+
+function allocateWire() { return {}; }
+function releaseWire(w) { }
+
+// ========== 绘图主函数 ==========
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save(); ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1;
+    const gs = 20 * state.zoom, ox = state.panX % gs, oy = state.panY % gs;
+    ctx.beginPath();
+    for (let x = ox; x < state.width; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, state.height); }
+    for (let y = oy; y < state.height; y += gs) { ctx.moveTo(0, y); ctx.lineTo(state.width, y); }
+    ctx.stroke(); ctx.restore();
+
+    ctx.save(); ctx.translate(state.panX, state.panY); ctx.scale(state.zoom, state.zoom);
+
+    state.shapes.forEach(s => {
+        ctx.save();
+        if (s.type === 'part' || s.type === 'image') {
+            ctx.translate(s.x, s.y); ctx.rotate(s.rotation * Math.PI / 180);
+            if (s.type === 'part') drawPart(ctx, s);
+            else if (s.type === 'image' && s.img) ctx.drawImage(s.img, -s.w / 2, -s.h / 2, s.w, s.h);
+        } else if (s.type === 'drawing') {
+            drawPath(ctx, s);
+        } else if (s.type === 'line') {
+            drawLine(ctx, s);
+        } else if (s.type === 'wire') {
+            drawWire(ctx, s);
+        } else {
+            drawAnnotation(ctx, s);
+        }
+        ctx.restore();
+    });
+
+    if (state.isDrawing && state.currentPath.length > 0) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.moveTo(state.currentPath[0].x, state.currentPath[0].y);
+        for (let i = 1; i < state.currentPath.length; i++) ctx.lineTo(state.currentPath[i].x, state.currentPath[i].y);
+        ctx.stroke();
+    }
+
+    const partsForPorts = state.shapes.filter(s => s.type === 'part');
+    partsForPorts.forEach(ps => {
+        const ports = listPorts(ps);
+        ports.forEach(pk => {
+            const p = portWorldPos(ps, pk);
+            if (!p) return;
+            ctx.save();
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = (state.hoverPort && state.hoverPort.shapeId === ps.id && state.hoverPort.port === pk && state.hoverPort.portType !== 'mech') ? '#22c55e' : '#666666';
+            ctx.lineWidth = 1.5 / state.zoom;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 6 / state.zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.restore();
+        });
+        const mps = listMechPorts(ps);
+        mps.forEach(pk => {
+            const p = mechPortWorldPos(ps, pk);
+            if (!p) return;
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(45 * Math.PI / 180);
+            const isHov = state.hoverPort && state.hoverPort.shapeId === ps.id && state.hoverPort.port === pk && state.hoverPort.portType === 'mech';
+            ctx.fillStyle = isHov ? '#ff6600' : '#aaaaaa';
+            ctx.strokeStyle = isHov ? '#ff6600' : '#555555';
+            ctx.lineWidth = 1.5 / state.zoom;
+            const size = 8 / state.zoom;
+            ctx.fillRect(-size / 2, -size / 2, size, size);
+            ctx.strokeRect(-size / 2, -size / 2, size, size);
+            ctx.restore();
+        });
+    });
+
+    if (state.wireStart) {
+        const spShape = state.shapes.find(s => s.id === state.wireStart.shapeId);
+        if (spShape) {
+            let sp;
+            if (state.wireStart.portType === 'mech') sp = mechPortWorldPos(spShape, state.wireStart.port);
+            else sp = portWorldPos(spShape, state.wireStart.port);
+            if (sp) {
+                let ex = state.mouseWx, ey = state.mouseWy;
+                if (state.hoverPort && state.hoverPort.portType === state.wireStart.portType) {
+                    const tps = state.shapes.find(s => s.id === state.hoverPort.shapeId);
+                    if (tps) {
+                        const tp = state.wireStart.portType === 'mech' ? mechPortWorldPos(tps, state.hoverPort.port) : portWorldPos(tps, state.hoverPort.port);
+                        if (tp) { ex = tp.x; ey = tp.y; }
+                    }
+                }
+                ctx.beginPath();
+                if (state.wireStart.portType === 'mech') {
+                    ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.setLineDash([8, 4]);
+                    ctx.moveTo(sp.x, sp.y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([]);
+                } else {
+                    ctx.strokeStyle = state.wireStart.color; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.setLineDash([5, 3]);
+                    const dy2 = Math.abs(ey - sp.y) * 0.4 + 30;
+                    ctx.moveTo(sp.x, sp.y); ctx.bezierCurveTo(sp.x, sp.y + dy2, ex, ey + dy2, ex, ey); ctx.stroke(); ctx.setLineDash([]);
+                }
+            }
+        }
+    }
+
+    if (state.isDragging && state.dragGroup && state.dragGroup.length > 1) {
+        state.dragGroup.forEach(id => {
+            if (id === state.dragTargetId) return;
+            const s = state.shapes.find(x => x.id === id);
+            if (!s || (s.type !== 'part' && s.type !== 'image')) return;
+            ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rotation * Math.PI / 180);
+            ctx.strokeStyle = 'rgba(255,140,0,0.7)'; ctx.lineWidth = 2 / state.zoom;
+            ctx.setLineDash([4 / state.zoom, 3 / state.zoom]);
+            ctx.strokeRect(-s.w / 2 - 2, -s.h / 2 - 2, s.w + 4, s.h + 4);
+            ctx.setLineDash([]); ctx.restore();
+        });
+    }
+
+    if (state.selectedId) {
+        const s = state.shapes.find(sh => sh.id === state.selectedId);
+        if (s && (s.type === 'part' || s.type === 'image')) {
+            ctx.save(); ctx.translate(s.x, s.y);
+            if (state.isRotating && state.dragTargetId === s.id) {
+                ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.font = 'bold 14px Arial';
+                ctx.fillText(Math.round(s.rotation % 360) + '°', 25, -s.h / 2 - 45); ctx.restore();
+            }
+            ctx.rotate(s.rotation * Math.PI / 180);
+            if (s.locked) {
+                ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 2 / state.zoom; ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h);
+                ctx.fillStyle = '#d32f2f'; ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🔒', 0, 0);
+            } else {
+                ctx.strokeStyle = '#0099ff'; ctx.lineWidth = 1.5 / state.zoom; ctx.setLineDash([4 / state.zoom, 2 / state.zoom]); ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h);
+                const rhDist = s.h / 2 + 25;
+                ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(0, -s.h / 2); ctx.lineTo(0, -rhDist); ctx.stroke();
+                ctx.fillStyle = state.hoverHandle === 'rotate' ? '#0066ff' : '#fff'; ctx.strokeStyle = '#0066ff';
+                ctx.beginPath(); ctx.arc(0, -rhDist, 6 / state.zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = state.hoverHandle === 'resize' ? '#a855f7' : '#fff'; ctx.strokeStyle = '#a855f7';
+                ctx.fillRect(s.w / 2 - 5 / state.zoom, s.h / 2 - 5 / state.zoom, 10 / state.zoom, 10 / state.zoom); ctx.strokeRect(s.w / 2 - 5 / state.zoom, s.h / 2 - 5 / state.zoom, 10 / state.zoom, 10 / state.zoom);
+            }
+            ctx.restore();
+        } else if (s && (s.type === 'line')) {
+            ctx.save(); ctx.strokeStyle = '#0099ff'; ctx.lineWidth = 1; ctx.setLineDash([4, 2]);
+            ctx.beginPath(); ctx.moveTo(s.points[0].x, s.points[0].y); ctx.lineTo(s.points[1].x, s.points[1].y); ctx.stroke();
+            ctx.restore();
+        } else if (s && s.type === 'wire') {
+            const ep = wireEndpoints(s);
+            if (ep) {
+                ctx.save(); ctx.strokeStyle = '#0099ff'; ctx.lineWidth = 1; ctx.setLineDash([4, 2]);
+                ctx.beginPath(); ctx.moveTo(ep.a.x, ep.a.y); ctx.lineTo(ep.b.x, ep.b.y); ctx.stroke();
+                ctx.restore();
+            }
+        }
+    }
+    ctx.restore();
+}
+
+function drawPath(c, s) {
+    if (!s.points || s.points.length < 2) return;
+    c.beginPath(); c.strokeStyle = s.color || '#333'; c.lineWidth = 3; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.moveTo(s.points[0].x, s.points[0].y);
+    for (let i = 1; i < s.points.length; i++) c.lineTo(s.points[i].x, s.points[i].y);
+    c.stroke();
+}
+function drawLine(c, s) {
+    if (!s.points || s.points.length < 2) return;
+    c.beginPath(); c.strokeStyle = s.color; c.lineWidth = 4; c.lineCap = 'round';
+    c.moveTo(s.points[0].x, s.points[0].y); c.lineTo(s.points[1].x, s.points[1].y); c.stroke();
+    c.fillStyle = s.color;
+    c.beginPath(); c.arc(s.points[0].x, s.points[0].y, 3, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(s.points[1].x, s.points[1].y, 3, 0, Math.PI * 2); c.fill();
+}
+function drawPart(c, s) {
+    const w = s.w, h = s.h, hw = w / 2, hh = h / 2;
+    c.fillStyle = s.color; c.strokeStyle = '#333'; c.lineWidth = 2;
+    c.shadowColor = "rgba(0,0,0,0.1)"; c.shadowBlur = 4; c.shadowOffsetX = 2; c.shadowOffsetY = 2;
+    c.beginPath();
+    if (s.subtype === 'rect') { c.rect(-hw, -hh, w, h); }
+    else if (s.subtype === 'round-rect') { c.roundRect(-hw, -hh, w, h, 10); }
+    else if (s.subtype === 'circle') { c.arc(0, 0, w / 2, 0, Math.PI * 2); }
+    else if (s.subtype === 'triangle-iso') { c.moveTo(-hw, hh); c.lineTo(hw, hh); c.lineTo(0, -hh); c.closePath(); }
+    else if (s.subtype === 'star') {
+        const outer = w / 2, inner = w / 4;
+        for (let i = 0; i < 5; i++) {
+            c.lineTo(Math.cos((18 + i * 72) / 180 * Math.PI) * outer, -Math.sin((18 + i * 72) / 180 * Math.PI) * outer);
+            c.lineTo(Math.cos((54 + i * 72) / 180 * Math.PI) * inner, -Math.sin((54 + i * 72) / 180 * Math.PI) * inner);
+        }
+        c.closePath();
+    }
+    else if (s.subtype === 'trapezoid') { c.moveTo(-hw + w * 0.2, -hh); c.lineTo(hw - w * 0.2, -hh); c.lineTo(hw, hh); c.lineTo(-hw, hh); c.closePath(); }
+    else if (s.subtype === 'arc') { c.arc(0, hh, w / 2, Math.PI, 0); c.closePath(); }
+    else if (s.subtype === 'motor') {
+        c.roundRect(-hw + 5, -hh, w - 10, h, 4); c.fill(); c.stroke();
+        c.fillStyle = '#666'; c.fillRect(-hw, -5, 5, 10);
+        const r = s.powerT;
+        const sr = Math.round(255 * (1 - r) + 255 * r);
+        const sg = Math.round(255 * (1 - r) + 215 * r);
+        const sb = Math.round(255 * (1 - r) + 0 * r);
+        c.fillStyle = 'rgb(' + sr + ',' + sg + ',' + sb + ')'; c.font = 'bold 14px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('M', 0, 0); return;
+    }
+    else if (s.subtype === 'battery') {
+        c.rect(-hw, -hh, w, h); c.fill(); c.stroke();
+        c.fillStyle = '#222'; c.fillRect(hw - 5, -hh + 10, 5, h - 20);
+        c.fillStyle = 'white'; c.font = '12px Arial'; c.fillText('+', hw - 15, -hh + 12);
+        const bw = w - 20, bh = 10, bx = -hw + 10, by = hh - 18;
+        c.strokeStyle = '#111'; c.strokeRect(bx, by, bw, bh);
+        c.fillStyle = '#4ade80'; c.fillRect(bx, by, bw * (s.level || 0), bh);
+        return;
+    }
+    else if (s.subtype === 'wheel') {
+        c.shadowColor = "transparent";
+        c.save(); c.rotate(s.spinAngle || 0);
+        c.beginPath(); c.arc(0, 0, w / 2, 0, Math.PI * 2); c.fillStyle = s.color; c.fill(); c.stroke();
+        c.fillStyle = '#555'; c.beginPath(); c.arc(0, 0, w / 2 - 6, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#888'; c.lineWidth = 2;
+        for (let i = 0; i < 4; i++) { c.rotate(Math.PI / 2); c.beginPath(); c.moveTo(0, w / 2 - 14); c.lineTo(0, w / 2 - 2); c.stroke(); }
+        c.restore(); return;
+    }
+    else if (s.subtype === 'gear') {
+        c.shadowColor = "transparent";
+        c.save(); c.rotate((s.spinAngle || 0));
+        c.setLineDash([5, 3]); c.strokeStyle = s.color;
+        c.arc(0, 0, w / 2, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
+        c.fillStyle = s.color; c.globalAlpha = 0.5; c.beginPath(); c.arc(0, 0, w / 2 - 4, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1;
+        c.restore(); return;
+    }
+    else if (s.subtype === 'switch') {
+        c.fillStyle = '#222'; c.fillRect(-hw, -hh, w, h); c.strokeStyle = s.closed ? s.color : '#d32f2f'; c.lineWidth = 3; c.beginPath(); if (s.closed) { c.moveTo(-w / 2 + 3, 0); c.lineTo(w / 2 - 3, 0); } else { c.moveTo(-w / 2 + 3, 0); c.lineTo(0, -hh / 2); } c.stroke(); return;
+    }
+    else if (s.subtype === 'axle') { c.rect(-hw, -hh, w, h); }
+    else if (s.subtype === 'sleeve') { c.roundRect(-hw, -hh, w, h, 4); }
+    c.fill(); c.stroke();
+}
+function drawAnnotation(c, s) {
+    c.shadowColor = "transparent";
+    if (s.type === 'label') {
+        const dx = s.ex - s.x, dy = s.ey - s.y; c.translate(s.x, s.y);
+        c.beginPath(); c.moveTo(0, 0); c.lineTo(dx / 2, dy); c.lineTo(dx, dy); c.stroke();
+        c.fillStyle = 'black'; c.beginPath(); c.arc(0, 0, 3, 0, Math.PI * 2); c.fill();
+        c.font = '14px Arial'; c.fillText(s.text, dx + 5, dy + 4);
+    } else if (s.type === 'dimension') {
+        c.translate(s.x, s.y);
+        c.beginPath(); c.moveTo(0, -5); c.lineTo(0, 20); c.moveTo(s.w, -5); c.lineTo(s.w, 20); c.moveTo(0, 10); c.lineTo(s.w, 10); c.stroke();
+        c.fillStyle = 'black'; c.beginPath(); c.moveTo(0, 10); c.lineTo(5, 7); c.lineTo(5, 13); c.fill();
+        c.beginPath(); c.moveTo(s.w, 10); c.lineTo(s.w - 5, 7); c.lineTo(s.w - 5, 13); c.fill();
+        c.font = '12px Arial'; c.textAlign = 'center'; c.fillText(s.text, s.w / 2, 25);
+    }
+}
+
+function getHandle(wx, wy, s) {
+    if ((s.type !== 'part' && s.type !== 'image') || s.locked) return null;
+    const rhDist = s.h / 2 + 25;
+    const rPos = rotatePoint(0, -rhDist, 0, 0, s.rotation);
+    const rWx = s.x + rPos.x, rWy = s.y + rPos.y;
+    if ((wx - rWx) ** 2 + (wy - rWy) ** 2 < (100 / (state.zoom ** 2))) return 'rotate';
+    const rsPos = rotatePoint(s.w / 2, s.h / 2, 0, 0, s.rotation);
+    const rsWx = s.x + rsPos.x, rsWy = s.y + rsPos.y;
+    if ((wx - rsWx) ** 2 + (wy - rsWy) ** 2 < (100 / (state.zoom ** 2))) return 'resize';
+    return null;
+}
+
+function checkEraserHit(wx, wy) {
+    const eraserRadius = 15 / state.zoom;
+    const toRemove = [];
+    state.shapes.forEach((s, i) => {
+        if (s.locked) return;
+        let hit = false;
+        if (s.type === 'line') {
+            if (distToSegment({ x: wx, y: wy }, s.points[0], s.points[1]) < eraserRadius) hit = true;
+        } else if (s.type === 'wire') {
+            const ep = wireEndpoints(s);
+            if (ep && distToSegment({ x: wx, y: wy }, ep.a, ep.b) < eraserRadius) hit = true;
+        } else if (s.type === 'drawing') {
+            if (s.points.some(p => Math.hypot(p.x - wx, p.y - wy) < eraserRadius)) hit = true;
+        } else {
+            if (isPointInShape(wx, wy, s)) hit = true;
+        }
+        if (hit) toRemove.push(i);
+    });
+    if (toRemove.length > 0) {
+        toRemove.sort((a, b) => b - a).forEach(idx => {
+            const s = state.shapes[idx];
+            state.shapes.splice(idx, 1);
+        });
+        afterShapeChange();
+        return true;
+    }
+    return false;
+}
+
+function getConnectedGroup(startId) {
+    const visited = new Set([startId]);
+    const queue = [startId];
+    while (queue.length) {
+        const curr = queue.shift();
+        state.shapes.forEach(w => {
+            if (w.type !== 'wire') return;
+            let nxt = null;
+            if (w.a.shapeId === curr) nxt = w.b.shapeId;
+            else if (w.b.shapeId === curr) nxt = w.a.shapeId;
+            if (nxt && !visited.has(nxt)) { visited.add(nxt); queue.push(nxt); }
+        });
+    }
+    return [...visited];
+}
+
+// ========== 事件监听 ==========
+wrapper.addEventListener('mousedown', (e) => {
+    const r = canvas.getBoundingClientRect(), m = { x: e.clientX - r.left, y: e.clientY - r.top }, w = toWorld(m.x, m.y);
+    state.startX = m.x; state.startY = m.y; state.lastX = m.x; state.lastY = m.y;
+
+    if (state.tool === 'draw') {
+        state.isDrawing = true;
+        state.currentPath = [{ x: w.x, y: w.y }];
+        return;
+    }
+
+    if (state.tool.startsWith('wire')) {
+        const preferType = state.tool === 'wire-mech' ? 'mech' : 'elec';
+        const p = getPortAt(w.x, w.y, preferType);
+        if (!p) { showToast(preferType === 'mech' ? '请点击机械端口 (◆菱形)' : '请点击电气端口 (●圆圈)'); return; }
+        const color = state.tool === 'wire-red' ? '#d32f2f' : (state.tool === 'wire-mech' ? '#999999' : '#212121');
+        state.wireStart = { shapeId: p.shapeId, port: p.port, portType: p.portType, color };
+        state.mouseWx = w.x; state.mouseWy = w.y; draw();
+        return;
+    }
+
+    if (state.tool === 'eraser') {
+        state.isErasing = true;
+        if (checkEraserHit(w.x, w.y)) {
+            draw();
+        }
+        return;
+    }
+
+    if (state.selectedId) {
+        const s = state.shapes.find(x => x.id === state.selectedId);
+        if (s && !s.locked) {
+            const handle = getHandle(w.x, w.y, s);
+            if (handle === 'rotate') {
+                state.isRotating = true; state.dragTargetId = s.id; state.initialRotation = s.rotation;
+                state.rotationStartAngle = Math.atan2(w.y - s.y, w.x - s.x) * 180 / Math.PI; return;
+            } else if (handle === 'resize') {
+                state.isResizing = true; state.dragTargetId = s.id;
+                state.resizeStartDist = Math.sqrt((w.x - s.x) ** 2 + (w.y - s.y) ** 2);
+                state.initialW = s.w; state.initialH = s.h; return;
+            }
+        }
+    }
+
+    if (e.button === 1) { state.isDragging = true; state.dragTargetId = 'canvas'; return; }
+
+    if (state.tool === 'select') {
+        let hit = null;
+        for (let i = state.shapes.length - 1; i >= 0; i--) {
+            const s = state.shapes[i];
+            if (s.type === 'part' || s.type === 'image') { if (isPointInShape(w.x, w.y, s)) { hit = s; break; } }
+            else if (s.type === 'wire') { const ep = wireEndpoints(s); if (ep && distToSegment({ x: w.x, y: w.y }, ep.a, ep.b) < 8 / state.zoom) { hit = s; break; } }
+            else if (s.type === 'label' || s.type === 'dimension') { if (Math.abs(w.x - s.x) < 20 && Math.abs(w.y - s.y) < 20) { hit = s; break; } }
+        }
+        if (hit) {
+            const alreadySelected = state.selectedId === hit.id;
+            selectShape(hit.id);
+            if (!hit.locked && hit.type !== 'wire') {
+                state.isDragging = true;
+                state.dragTargetId = hit.id;
+                state.dragGroup = alreadySelected ? null : getConnectedGroup(hit.id);
+            }
+        } else {
+            selectShape(null); state.isDragging = true; state.dragTargetId = 'canvas';
+        }
+    } else {
+        if (state.tool === 'label' || state.tool === 'dimension') addLabelOrDim(state.tool);
+    }
+    draw();
+});
+
+wrapper.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect(), m = { x: e.clientX - r.left, y: e.clientY - r.top }, w = toWorld(m.x, m.y);
+    const dx = m.x - state.lastX, dy = m.y - state.lastY;
+    state.mouseWx = w.x; state.mouseWy = w.y;
+    const prefT = state.tool === 'wire-mech' ? 'mech' : (state.tool.startsWith('wire') ? 'elec' : null);
+    state.hoverPort = getPortAt(w.x, w.y, prefT);
+
+    if (state.isDrawing) {
+        state.currentPath.push({ x: w.x, y: w.y });
+        draw();
+    } else if (state.isErasing) {
+        if (checkEraserHit(w.x, w.y)) draw();
+    } else if (state.isRotating && state.dragTargetId) {
+        const s = state.shapes.find(x => x.id === state.dragTargetId);
+        const curAngle = Math.atan2(w.y - s.y, w.x - s.x) * 180 / Math.PI;
+        s.rotation = state.initialRotation + (curAngle - state.rotationStartAngle); draw();
+    } else if (state.isResizing && state.dragTargetId) {
+        const s = state.shapes.find(x => x.id === state.dragTargetId);
+        const curDist = Math.sqrt((w.x - s.x) ** 2 + (w.y - s.y) ** 2);
+        const scale = curDist / state.resizeStartDist;
+        s.w = Math.max(10, state.initialW * scale); s.h = Math.max(10, state.initialH * scale); draw();
+    } else if (state.isDragging) {
+        if (state.dragTargetId === 'canvas') { state.panX += dx; state.panY += dy; }
+        else if (state.dragTargetId) {
+            const ids = state.dragGroup || [state.dragTargetId];
+            for (const id of ids) {
+                const s = state.shapes.find(x => x.id === id);
+                if (s && !s.locked) {
+                    s.x += dx / state.zoom; s.y += dy / state.zoom;
+                    if (s.type === 'label') { s.ex += dx / state.zoom; s.ey += dy / state.zoom; }
+                }
+            }
+        }
+        draw();
+    } else {
+        if (state.selectedId) {
+            const s = state.shapes.find(x => x.id === state.selectedId);
+            const handle = getHandle(w.x, w.y, s);
+            if (handle !== state.hoverHandle) {
+                state.hoverHandle = handle;
+                if (handle === 'rotate') wrapper.style.cursor = 'grab';
+                else if (handle === 'resize') wrapper.style.cursor = 'nwse-resize';
+                else wrapper.style.cursor = 'default';
+                draw();
+            }
+        }
+        draw();
+    }
+    state.lastX = m.x; state.lastY = m.y;
+});
+
+wrapper.addEventListener('mouseup', () => {
+    let changed = false;
+    if (state.isDrawing && state.tool === 'draw') {
+        state.shapes.push({ id: generateId(), type: 'drawing', points: [...state.currentPath], color: '#333' });
+        state.currentPath = []; changed = true;
+    }
+    if (state.wireStart) {
+        const end = state.hoverPort;
+        const prefType = state.wireStart.portType || 'elec';
+        if (end && end.portType === prefType && !(end.shapeId === state.wireStart.shapeId && end.port === state.wireStart.port)) {
+            const exists = state.shapes.some(s => s.type === 'wire' && ((s.a.shapeId === state.wireStart.shapeId && s.a.port === state.wireStart.port && s.b.shapeId === end.shapeId && s.b.port === end.port) || (s.b.shapeId === state.wireStart.shapeId && s.b.port === state.wireStart.port && s.a.shapeId === end.shapeId && s.a.port === end.port)));
+            if (!exists) {
+                const obj = allocateWire();
+                obj.id = generateId(); obj.type = 'wire';
+                obj.wireType = prefType;
+                obj.a = { shapeId: state.wireStart.shapeId, port: state.wireStart.port };
+                obj.b = { shapeId: end.shapeId, port: end.port };
+                obj.color = state.wireStart.color;
+                state.shapes.push(obj);
+                afterShapeChange();
+                changed = true; showToast(prefType === 'mech' ? '机械连接成功' : '电气连接成功');
+            } else {
+                showToast('已存在相同连接'); beep('error');
+            }
+        } else if (end && end.portType !== prefType) {
+            showToast('类型不匹配！电气线不能连机械端口'); beep('error');
+        } else {
+            if (end) { showToast('连接失败'); beep('error'); }
+        }
+        state.wireStart = null; state.hoverPort = null; draw();
+    }
+
+    if (state.isDragging && state.dragTargetId !== 'canvas') changed = true;
+    if (state.isRotating || state.isResizing || state.isErasing) changed = true;
+
+    state.isDragging = false; state.isRotating = false; state.isResizing = false; state.isDrawing = false; state.isErasing = false;
+    state.dragTargetId = null; state.dragGroup = null;
+    draw();
+    if (changed) { saveState(); updateCircuit(); }
+});
+
+wrapper.addEventListener('dblclick', (e) => {
+    const r = canvas.getBoundingClientRect(), m = { x: e.clientX - r.left, y: e.clientY - r.top }, w = toWorld(m.x, m.y);
+    let hit = null;
+    for (let i = state.shapes.length - 1; i >= 0; i--) { const s = state.shapes[i]; if (s.type === 'part' && isPointInShape(w.x, w.y, s)) { hit = s; break; } }
+    if (hit && hit.subtype === 'switch' && !hit.locked) { hit.closed = !hit.closed; updateCircuit(); draw(); saveState(); showToast(hit.closed ? '开关：闭合' : '开关：断开'); return; }
+    if (hit && hit.subtype === 'battery' && !hit.locked) { hit.tripped = false; showToast('电池保护复位'); updateCircuit(); draw(); saveState(); return; }
+    if (hit && hit.subtype === 'sleeve' && !hit.locked) {
+        showToast('编辑轴套参数或设置单价（可在材料清单中修改）');
+        return;
+    }
+    editText();
+});
+
+wrapper.addEventListener('wheel', (e) => { e.preventDefault(); changeZoom(e.deltaY > 0 ? -0.1 : 0.1); }, { passive: false });
+
+wrapper.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); hideCtxMenu();
+    const r = canvas.getBoundingClientRect(), m = { x: e.clientX - r.left, y: e.clientY - r.top }, w = toWorld(m.x, m.y);
+    let target = null, best = 1e9, idx = -1;
+    state.shapes.forEach((s, i) => {
+        if (s.type === 'wire') {
+            const ep = wireEndpoints(s);
+            if (!ep) return;
+            const d = distToSegment({ x: w.x, y: w.y }, ep.a, ep.b);
+            if (d < 8 / state.zoom && d < best) { best = d; idx = i; target = s; }
+        }
+    });
+    if (target) {
+        state.ctxMenuWireId = target.id;
+        const cm = document.getElementById('ctx-menu');
+        cm.style.left = (m.x + 5) + 'px';
+        cm.style.top = (m.y + 5) + 'px';
+        cm.style.display = 'block';
+    }
+});
+
+document.addEventListener('click', hideCtxMenu);
+function hideCtxMenu() { const cm = document.getElementById('ctx-menu'); cm.style.display = 'none'; state.ctxMenuWireId = null; }
+function deleteCtxWire() {
+    if (!state.ctxMenuWireId) return;
+    const idx = state.shapes.findIndex(s => s.id === state.ctxMenuWireId);
+    if (idx >= 0) {
+        const w = state.shapes[idx];
+        if (w.type === 'wire') {
+            releaseWire(w);
+            state.shapes.splice(idx, 1);
+            afterShapeChange();
+            saveState(); updateCircuit(); draw(); showToast('已断开连接');
+        }
+    }
+    hideCtxMenu();
+}
+
+// ========== 电路仿真 ==========
+let audioCtx;
+function beep(kind) {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'sine';
+        o.frequency.value = kind === 'error' ? 440 : 660;
+        g.gain.value = 0.05;
+        o.connect(g);
+        g.connect(audioCtx.destination);
+        o.start();
+        setTimeout(() => { o.stop(); o.disconnect(); g.disconnect(); }, 120);
+    } catch (e) { }
+}
+
+function updateCircuit() {
+    const nodes = new Map();
+    const nid = (id, port) => id + ':' + port;
+    const add = (a, b) => {
+        if (!nodes.has(a)) nodes.set(a, new Set());
+        if (!nodes.has(b)) nodes.set(b, new Set());
+        nodes.get(a).add(b);
+        nodes.get(b).add(a);
+    };
+    state.shapes.forEach(s => {
+        if (s.type === 'wire' && s.wireType !== 'mech') {
+            const a = nid(s.a.shapeId, s.a.port), b = nid(s.b.shapeId, s.b.port);
+            add(a, b);
+        }
+    });
+    state.shapes.forEach(s => {
+        if (s.type === 'part' && s.subtype === 'switch' && s.closed) {
+            const ins = nid(s.id, 'IN'), outs = nid(s.id, 'OUT');
+            add(ins, outs);
+        }
+    });
+    const plusSets = []; const minusSets = [];
+    function bfs(start) {
+        const set = new Set(); const q = [start]; const seen = new Set([start]);
+        while (q.length) {
+            const x = q.shift(); set.add(x);
+            const ns = nodes.get(x);
+            if (!ns) continue;
+            ns.forEach(y => { if (!seen.has(y)) { seen.add(y); q.push(y); } });
+        }
+        return set;
+    }
+    const batteries = state.shapes.filter(s => s.type === 'part' && s.subtype === 'battery');
+    batteries.forEach(b => { plusSets.push(bfs(nid(b.id, '+'))); minusSets.push(bfs(nid(b.id, '-'))); });
+    let short = false;
+    for (let i = 0; i < plusSets.length; i++) {
+        for (let a of plusSets[i]) {
+            if (minusSets[i].has(a)) { short = true; break; }
+        }
+        if (short) break;
+    }
+    if (short && !state.shortActive) { state.shortActive = true; batteries.forEach(b => b.tripped = true); beep('error'); showToast('短路！电池已保护'); }
+    if (!short) state.shortActive = false;
+
+    const allPoweredNodes = new Set();
+    plusSets.forEach((ps, i) => { const bat = batteries[i]; if (bat && !bat.tripped && (bat.level || 0) > 0) ps.forEach(n => allPoweredNodes.add(n)); });
+    minusSets.forEach((ms, i) => { const bat = batteries[i]; if (bat && !bat.tripped && (bat.level || 0) > 0) ms.forEach(n => allPoweredNodes.add(n)); });
+
+    state.shapes.forEach(s => {
+        if (s.type === 'part' && s.subtype === 'motor') {
+            const a = nid(s.id, 'A'), b = nid(s.id, 'B');
+            let p = false;
+            for (let i = 0; i < plusSets.length; i++) {
+                const plus = plusSets[i], minus = minusSets[i];
+                if ((plus.has(a) && minus.has(b)) || (plus.has(b) && minus.has(a))) {
+                    const bat = batteries[i];
+                    p = !!bat && !bat.tripped && (bat.level || 0) > 0;
+                }
+            }
+            s.powered = p;
+        }
+    });
+    state.shapes.forEach(s => {
+        if (s.type === 'wire' && s.wireType !== 'mech') {
+            const an = nid(s.a.shapeId, s.a.port), bn = nid(s.b.shapeId, s.b.port);
+            s.wirePowered = allPoweredNodes.has(an) || allPoweredNodes.has(bn);
+        }
+    });
+
+    state.shapes.forEach(s => { if (s.type === 'part') s.mechSpinning = false; });
+    state.shapes.forEach(s => { if (s.type === 'wire' && s.wireType === 'mech') s.mechSpinning = false; });
+    const poweredMotors = state.shapes.filter(s => s.type === 'part' && s.subtype === 'motor' && s.powered);
+    function mechBFS(startId) {
+        const visited = new Set([startId]); const queue = [startId];
+        while (queue.length) {
+            const curr = queue.shift();
+            const cs = state.shapes.find(x => x.id === curr);
+            if (cs) cs.mechSpinning = true;
+            state.shapes.forEach(w => {
+                if (w.type !== 'wire' || w.wireType !== 'mech') return;
+                let nxt = null;
+                if (w.a.shapeId === curr) nxt = w.b.shapeId;
+                else if (w.b.shapeId === curr) nxt = w.a.shapeId;
+                if (nxt && !visited.has(nxt)) { visited.add(nxt); queue.push(nxt); w.mechSpinning = true; }
+            });
+        }
+    }
+    poweredMotors.forEach(m => mechBFS(m.id));
+    draw();
+}
+
+function tick() {
+    const motors = state.shapes.filter(s => s.type === 'part' && s.subtype === 'motor');
+    const batteries = state.shapes.filter(s => s.type === 'part' && s.subtype === 'battery');
+    let needDraw = false;
+    motors.forEach(m => {
+        const t = m.powered ? 1 : 0;
+        const nt = m.powerT + (t - m.powerT) * 0.15;
+        if (Math.abs(nt - m.powerT) > 0.001) { m.powerT = nt; needDraw = true; }
+    });
+    const anyPowered = motors.some(m => m.powered);
+    batteries.forEach(b => {
+        if (anyPowered && !b.tripped && b.level > 0) { b.level = Math.max(0, b.level - 0.0005); needDraw = true; }
+    });
+    state.shapes.forEach(s => {
+        if (s.type === 'part' && s.mechSpinning && (s.subtype === 'gear' || s.subtype === 'wheel' || s.subtype === 'axle')) {
+            if (!s.spinAngle) s.spinAngle = 0;
+            s.spinAngle += 0.05;
+            needDraw = true;
+        }
+    });
+    if (needDraw) draw();
+    requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelected(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteClipboard(); return; }
+    if (e.key === 'Delete') deleteSelected();
+    if (e.key === ' ') wrapper.style.cursor = 'grab';
+    const step = e.shiftKey ? 10 : 2;
+    if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        if (state.selectedId) {
+            const s = state.shapes.find(x => x.id === state.selectedId);
+            if (s && !s.locked) {
+                if (e.key === 'ArrowUp') s.y -= step / state.zoom;
+                if (e.key === 'ArrowDown') s.y += step / state.zoom;
+                if (e.key === 'ArrowLeft') s.x -= step / state.zoom;
+                if (e.key === 'ArrowRight') s.x += step / state.zoom;
+                if (s.type === 'label') {
+                    if (e.key === 'ArrowUp') s.ey -= step / state.zoom;
+                    if (e.key === 'ArrowDown') s.ey += step / state.zoom;
+                    if (e.key === 'ArrowLeft') s.ex -= step / state.zoom;
+                    if (e.key === 'ArrowRight') s.ex += step / state.zoom;
+                }
+                draw(); saveState();
+            }
+        } else {
+            if (e.key === 'ArrowUp') state.panY += step;
+            if (e.key === 'ArrowDown') state.panY -= step;
+            if (e.key === 'ArrowLeft') state.panX += step;
+            if (e.key === 'ArrowRight') state.panX -= step;
+            draw();
+        }
+    }
+});
+window.addEventListener('keyup', (e) => { if (e.key === ' ') wrapper.style.cursor = 'default'; });
+
+function loadFromURL() { }
+</script>
+
+<!-- ========== 第二步：5.2分组折叠交互与状态记忆 (保留，依赖5.1函数) ========== -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const groups = ['export', 'draw', 'connect', 'property', 'history', 'clear', 'insert'];
+    groups.forEach(g => {
+        const toggle = document.querySelector(`[data-group="${g}"]`);
+        const content = document.getElementById(`group-content-${g}`);
+        if (!toggle || !content) return;
+        let defaultExpanded = (g === 'draw' || g === 'connect');
+        const saved = localStorage.getItem(`group_expand_${g}`);
+        let expanded = saved !== null ? (saved === 'true') : defaultExpanded;
+        if (expanded) {
+            toggle.classList.add('expanded');
+            content.classList.add('expanded');
+        } else {
+            toggle.classList.remove('expanded');
+            content.classList.remove('expanded');
+        }
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isExpanded = content.classList.contains('expanded');
+            if (isExpanded) {
+                content.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+                localStorage.setItem(`group_expand_${g}`, 'false');
+            } else {
+                content.classList.add('expanded');
+                toggle.classList.add('expanded');
+                localStorage.setItem(`group_expand_${g}`, 'true');
+            }
+        });
+    });
+
+    function updatePropertyButtons() {
+        const hasSelected = !!state.selectedId;
+        const s = hasSelected ? state.shapes.find(x => x.id === state.selectedId) : null;
+        const locked = s && s.locked;
+        const propGroup = document.getElementById('group-content-property');
+        if (propGroup) {
+            const btns = propGroup.querySelectorAll('button, .color-picker-wrapper, .scale-input, .angle-input');
+            btns.forEach(el => {
+                if (el.classList.contains('color-picker-wrapper')) {
+                    const input = el.querySelector('input');
+                    if (input) input.disabled = !hasSelected || locked;
+                } else if (el.tagName === 'BUTTON') {
+                    if (el.id === 'btn-lock') return;
+                    el.disabled = !hasSelected || locked;
+                } else if (el.tagName === 'INPUT') {
+                    el.disabled = !hasSelected || locked;
+                }
+            });
+        }
+        const clearGroup = document.getElementById('group-content-clear');
+        if (clearGroup) {
+            const delBtn = Array.from(clearGroup.querySelectorAll('button')).find(b => b.onclick === deleteSelected || b.innerHTML.includes('删除'));
+            if (delBtn) delBtn.disabled = !hasSelected;
+        }
+    }
+
+    const originalSelectShape = window.selectShape;
+    window.selectShape = function(id) {
+        if (originalSelectShape) originalSelectShape(id);
+        updatePropertyButtons();
+    };
+
+    setTimeout(updatePropertyButtons, 200);
+});
+</script>
+</body>
+</html>
